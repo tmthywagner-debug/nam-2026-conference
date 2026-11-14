@@ -12,6 +12,7 @@ files:
 tests:
   - tests/schedule.spec.js
   - tests/session.spec.js
+  - tests/api/sessions-tracks.test.js
 related: [seats, attendance, agenda, venues, speakers, ui, clock]
 ---
 
@@ -29,7 +30,7 @@ and a bound `?` to `args`:
 | param | clause |
 | --- | --- |
 | `day` | `s.day = ?` |
-| `trackSlug` | `t.slug = ?` |
+| `trackSlug` | `t.slug IN (?, …)` — one slug or a comma-separated list (trimmed, empties dropped), any match |
 | `venueId` / `roomId` | `v.id = ?` / `r.id = ?` |
 | `level` / `format` | `s.level = ?` / `s.format = ?` |
 | `q` | `LIKE %q%` on title, abstract, subtitle, or any speaker name (`EXISTS`) |
@@ -52,7 +53,7 @@ lists are plain `toSession` — no speakers/tags. **`/:id.ics`** is registered
 
 **`SchedulePage`** reads everything from `useSearchParams`:
 `day` (default `clock.day` if it is a conference day, else `days[0].date`),
-`track`, `venue` (venue id), `level`, `format`, `tag` (topic slug), `q`, `view`.
+`track` (one slug or `a,b` — a multi-select), `venue` (venue id), `level`, `format`, `tag` (topic slug), `q`, `view`.
 Page keys map to API keys in the `useFetch` call (`track→trackSlug`,
 `venue→venueId`, `tag→tagSlug`). `set(key, value)` deletes the key for `'all'`/empty
 and writes with `{ replace: true }`; `clearAll` keeps `day` and an explicit `view`.
@@ -69,7 +70,7 @@ The list groups sessions by `startsAt` into `slot-<HH:MM>` sections of
 `SessionCard`s in a `grid-flow-row-dense` auto-fit grid. The filter rail
 (`aside`, hidden below `lg` until the Filters button toggles `railOpen`) holds
 `search-input`, `starred-count` (= `reservations.size`, the agenda count), day
-buttons `tab-<date>`, track pills, and `Select`s for venue/level/format/topic.
+buttons `tab-<date>`, track pills (toggles with `aria-pressed`; `All` clears), and `Select`s for venue/level/format/topic.
 Below `lg` the open rail is compact so the first card stays in view at 393×659: days in one
 row (no weekday or count), tracks in one scrolling row (the Day and Track headings turn screen-reader-only), selects in two columns, and the
 My agenda card is desktop-only (`starred-count` stays in the DOM, `hidden lg:block`);
