@@ -55,7 +55,57 @@ test.describe('Schedule', () => {
     await expect(page.getByTestId('search-input')).toHaveValue('agents');
   });
 
-  test('filtering by venue only returns that venue', async ({ page }) => {
+  test('several tracks can be selected, kept in the URL, and combined with a day', async ({ page, request }) => {
+    const days = await conferenceDays();
+    const { tracks } = await (await request.get(`${API}/bootstrap`)).json();
+    const [a, b] = tracks;
+    const count = async (query) => (await (await request.get(`${API}/sessions?${query}`)).json()).length;
+    const label = (t) => new RegExp(`^${(t.shortName ?? t.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+    const result = page.getByTestId('result-count');
+    const total = (n) => new RegExp(`^${n} sessions?\\b`);
+    const [onlyA, onlyB, union] = [await count(`day=${days[0]}&trackSlug=${a.slug}`), await count(`day=${days[0]}&trackSlug=${b.slug}`),
+      await count(`day=${days[0]}&trackSlug=${a.slug},${b.slug}`)];
+
+    await visit(page, `/schedule?view=list&day=${days[0]}`);
+    await waitForResults(page);
+    const filters = page.getByRole('button', { name: /^Filters/ });
+    if (await filters.isVisible()) await filters.click();
+    const chipA = page.getByRole('button', { name: label(a) });
+    const chipB = page.getByRole('button', { name: label(b) });
+    await expect(page.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    await chipA.click();
+    await expect(result).toHaveText(total(onlyA));
+    await chipB.click();
+    await expect(result).toHaveText(total(union));
+    await expect(page).toHaveURL(/track=[^&]+%2C[^&]+|track=[^&]+,[^&]+/);
+    await shotForPR(page, 'two tracks selected');
+
+    await chipA.click();                       // a removal, not only additions
+    await expect(result).toHaveText(total(onlyB));
+    await chipA.click();
+
+    await page.reload();
+    await waitForResults(page);
+    if (await filters.isVisible()) await filters.click();
+    await expect(chipA).toHaveAttribute('aria-pressed', 'true');
+    await expect(chipB).toHaveAttribute('aria-pressed', 'true');
+    await expect(result).toHaveText(total(union));
+
+    // a day tab still narrows the selected pair
+    await page.getByTestId(`tab-${days[1]}`).click();
+    await expect(result).toHaveText(total(await count(`day=${days[1]}&trackSlug=${a.slug},${b.slug}`)));
+
+    // an old single-track link still works
+    await visit(page, `/schedule?view=list&day=${days[0]}&track=${a.slug}`);
+    await waitForResults(page);
+    if (await filters.isVisible()) await filters.click();
+    await expect(chipA).toHaveAttribute('aria-pressed', 'true');
+    await expect(chipB).toHaveAttribute('aria-pressed', 'false');
+    await expect(result).toHaveText(total(onlyA));
+  });
+
+  test('filtering by venue only returns that venue',async ({ page }) => {
     await visit(page, '/schedule?venue=2&view=list');
     await waitForResults(page);
     // Everything at the Foundry carries the cross-town chip.
